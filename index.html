@@ -1,1 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TruthLens - AI News Analyzer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #ffffff;
+        }
+        .primary-red { color: #E53E3E; }
+        .bg-primary-red { background-color: #E53E3E; }
+        .hover-bg-primary-red-darker:hover { background-color: #C53030; }
+        .border-primary-red { border-color: #E53E3E; }
+        .focus-ring-red:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(229, 62, 62, 0.4);
+        }
+        textarea#newsInput {
+            border: 2px solid #E2E8F0;
+            transition: border-color 0.3s ease-in-out;
+        }
+        textarea#newsInput:focus { border-color: #E53E3E; }
+        .result-text-fake { color: #E53E3E; font-weight: 600; }
+        .result-text-real { color: #2D3748; font-weight: 600; }
+        .result-text-info { color: #4A5568; }
+        .result-text-error { color: #E53E3E; }
+        .main-container { max-width: 700px; margin: auto; padding: 2rem; }
+        .action-button {
+            background-color: #E53E3E;
+            color: #ffffff;
+            font-weight: 600;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.375rem;
+            transition: background-color 0.2s ease-in-out;
+            line-height: 1.5; /* Ensure text is vertically centered */
+        }
+        .action-button:hover { background-color: #C53030; }
+        .action-button:disabled {
+            background-color: #FCA5A5;
+            cursor: not-allowed;
+        }
+        .secondary-button {
+            background-color: #FEE2E2; /* Lighter red (red-100) */
+            color: #C53030; /* Darker red text (red-700) */
+            font-weight: 600;
+            padding: 0.65rem 1.25rem; /* Slightly smaller padding */
+            border-radius: 0.375rem;
+            border: 1px solid #FCA5A5; /* red-300 */
+            transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+            line-height: 1.5;
+        }
+        .secondary-button:hover {
+            background-color: #FECACA; /* red-200 */
+            color: #A02828; /* red-800 */
+        }
+        .secondary-button:disabled {
+            background-color: #FEF2F2; /* red-50 */
+            color: #FCA5A5; /* red-400 */
+            border-color: #FEE2E2; /* red-100 */
+            cursor: not-allowed;
+        }
+        .spinner {
+            display: inline-block;
+            position: relative;
+            width: 80px;
+            height: 20px;
+        }
+        .spinner div {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #E53E3E;
+            animation-timing-function: cubic-bezier(0, 1, 1, 0);
+        }
+        .spinner div:nth-child(1) { left: 8px; animation: spinner1 0.6s infinite; }
+        .spinner div:nth-child(2) { left: 8px; animation: spinner2 0.6s infinite; }
+        .spinner div:nth-child(3) { left: 32px; animation: spinner2 0.6s infinite; }
+        .spinner div:nth-child(4) { left: 56px; animation: spinner3 0.6s infinite; }
+        @keyframes spinner1 { 0% { transform: scale(0) translateY(-50%); } 100% { transform: scale(1) translateY(-50%); } }
+        @keyframes spinner3 { 0% { transform: scale(1) translateY(-50%); } 100% { transform: scale(0) translateY(-50%); } }
+        @keyframes spinner2 { 0% { transform: translate(0, -50%); } 100% { transform: translate(24px, -50%); } }
+
+        /* Styling for Gemini results */
+        .gemini-result-section {
+            border-left: 4px solid #E53E3E;
+            padding-left: 1rem;
+            margin-top: 1rem;
+        }
+        .gemini-result-section h4 {
+            color: #E53E3E;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+         .gemini-result-section ul {
+            list-style-type: disc;
+            padding-left: 1.5rem;
+            color: #4A5568;
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <div class="main-container min-h-screen flex flex-col items-center justify-center py-8">
+        <header class="text-center mb-10">
+            <h1 class="text-5xl font-bold primary-red">TruthLens</h1>
+            <p class="text-gray-500 mt-2 text-lg">Your AI-Powered News Authenticity Check</p>
+        </header>
+
+        <main class="w-full bg-white p-8 rounded-lg shadow-xl">
+            <div class="mb-6">
+                <label for="newsInput" class="block text-sm font-medium text-gray-700 mb-1">
+                    Paste news article text or URL below:
+                </label>
+                <textarea id="newsInput" rows="8"
+                    class="w-full p-3 border-2 border-gray-300 rounded-md shadow-sm focus-ring-red text-gray-700"
+                    placeholder="Enter the news content here..."></textarea>
+            </div>
+
+            <div class="flex flex-col sm:flex-row justify-center gap-4 mb-6">
+                <button id="analyzeButton" class="action-button w-full sm:w-auto">
+                    Analyze News
+                </button>
+                <button id="summarizeButton" class="secondary-button w-full sm:w-auto">
+                    ✨ Get AI Summary & Key Points
+                </button>
+            </div>
+
+            <div id="resultArea" class="mt-6 p-6 bg-gray-50 rounded-md min-h-[120px] flex items-center justify-center border border-gray-200">
+                <p class="text-gray-400 italic">AI analysis results will appear here.</p>
+            </div>
+        </main>
+
+        <footer class="text-center mt-12 py-4">
+            <p class="text-sm text-gray-400">
+                &copy; <span id="currentYear"></span> TruthLens. Powered by AI. For informational purposes only.
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+
+        const analyzeButton = document.getElementById('analyzeButton');
+        const summarizeButton = document.getElementById('summarizeButton');
+        const newsInput = document.getElementById('newsInput');
+        const resultArea = document.getElementById('resultArea');
+        
+        const GEMINI_API_KEY = ""; // Leave empty, Canvas will handle it.
+        const GEMINI_API_URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
+        const GEMINI_MODEL_TEXT = "gemini-2.0-flash";
+
+
+        analyzeButton.addEventListener('click', async () => {
+            const inputText = newsInput.value.trim();
+            if (!inputText) {
+                displayMessage('Please enter some news text or a URL to analyze.', 'error');
+                return;
+            }
+            setLoadingState(true, "Analyzing authenticity...");
+            try {
+                const analysis = await analyzeWithGeminiAPI(inputText);
+                displayGeminiAnalysisResult(analysis);
+            } catch (error) {
+                console.error('Error during Gemini analysis:', error);
+                displayMessage(`Analysis Error: ${error.message || 'Could not connect to AI service.'}`, 'error');
+            } finally {
+                setLoadingState(false);
+            }
+        });
+
+        summarizeButton.addEventListener('click', async () => {
+            const inputText = newsInput.value.trim();
+            if (!inputText) {
+                displayMessage('Please enter some news text to summarize.', 'error');
+                return;
+            }
+            setLoadingState(true, "Generating summary...");
+            try {
+                const summary = await getSummaryWithGeminiAPI(inputText);
+                displayGeminiSummaryResult(summary, inputText);
+            } catch (error) {
+                console.error('Error during Gemini summary:', error);
+                displayMessage(`Summary Error: ${error.message || 'Could not connect to AI service.'}`, 'error');
+            } finally {
+                setLoadingState(false);
+            }
+        });
+
+        function setLoadingState(isLoading, message = "Processing...") {
+            analyzeButton.disabled = isLoading;
+            summarizeButton.disabled = isLoading;
+            if (isLoading) {
+                resultArea.innerHTML = `
+                    <div class="flex flex-col items-center">
+                        <div class="spinner"><div></div><div></div><div></div><div></div></div>
+                        <p class="text-gray-500 mt-3">${message}</p>
+                    </div>`;
+            }
+        }
+
+        function displayMessage(message, type = 'info') {
+            let messageClass = 'result-text-info';
+            if (type === 'error') messageClass = 'result-text-error';
+            resultArea.innerHTML = `<p class="${messageClass} text-center">${message}</p>`;
+        }
+
+        async function callGeminiAPI(prompt, model = GEMINI_MODEL_TEXT) {
+            const apiUrl = `${GEMINI_API_URL_BASE}${model}:generateContent?key=${GEMINI_API_KEY}`;
+            
+            const payload = {
+                contents: [{ role: "user", parts: [{ text: prompt }] }]
+            };
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const errorBody = await response.text();
+                console.error("Gemini API Error Response:", errorBody);
+                throw new Error(`Gemini API request failed with status ${response.status}. ${errorBody}`);
+            }
+
+            const result = await response.json();
+
+            if (result.candidates && result.candidates.length > 0 &&
+                result.candidates[0].content && result.candidates[0].content.parts &&
+                result.candidates[0].content.parts.length > 0) {
+                return result.candidates[0].content.parts[0].text;
+            } else {
+                console.error("Unexpected Gemini API response structure:", result);
+                throw new Error('Invalid response structure from Gemini API.');
+            }
+        }
+
+        async function analyzeWithGeminiAPI(text) {
+            const prompt = `
+                You are a news analysis AI. Analyze the following news content for its authenticity and potential for misinformation.
+                Provide your analysis STRICTLY in the following format, with each item on a new line:
+                Verdict: [Likely Fake/Potentially Misleading/Appears Credible/Likely Real]
+                Confidence: [High/Medium/Low]
+                Explanation: [Briefly explain your reasoning, pointing out any red flags or signs of credibility. Max 70 words.]
+
+                News Content:
+                ---
+                ${text}
+                ---
+            `;
+            const rawResponse = await callGeminiAPI(prompt);
+            return parseGeminiAnalysisResponse(rawResponse);
+        }
+
+        function parseGeminiAnalysisResponse(rawResponse) {
+            const lines = rawResponse.split('\n');
+            const analysis = {};
+            lines.forEach(line => {
+                if (line.startsWith("Verdict:")) analysis.verdict = line.substring("Verdict:".length).trim();
+                else if (line.startsWith("Confidence:")) analysis.confidence = line.substring("Confidence:".length).trim();
+                else if (line.startsWith("Explanation:")) analysis.explanation = line.substring("Explanation:".length).trim();
+            });
+             if (!analysis.verdict || !analysis.confidence || !analysis.explanation) {
+                console.warn("Could not parse all fields from Gemini analysis response:", rawResponse, analysis);
+                // Fallback if parsing fails
+                analysis.explanation = (analysis.explanation || "") + " (Response might be partially parsed: " + rawResponse.substring(0,100) + "...)";
+                analysis.verdict = analysis.verdict || "Analysis Incomplete";
+                analysis.confidence = analysis.confidence || "Unknown";
+            }
+            return analysis;
+        }
+
+        function displayGeminiAnalysisResult(analysis) {
+            const isPotentiallyFake = analysis.verdict && (analysis.verdict.toLowerCase().includes('fake') || analysis.verdict.toLowerCase().includes('misleading'));
+            const verdictClass = isPotentiallyFake ? 'result-text-fake' : 'result-text-real';
+
+            let resultHTML = `
+                <div class="text-center w-full">
+                    <h3 class="text-xl font-semibold mb-2 ${verdictClass}">
+                        ${analysis.verdict || 'Analysis Result'}
+                    </h3>
+                    <div class="gemini-result-section text-left mx-auto max-w-md">
+                        <p class="text-gray-700"><strong class="font-medium">AI Explanation:</strong> ${analysis.explanation || 'Not available.'}</p>
+                        <p class="text-sm font-medium mt-1 ${isPotentiallyFake ? 'primary-red' : 'text-gray-700'}">
+                            AI Confidence: ${analysis.confidence || 'Not available.'}
+                        </p>
+                    </div>
+                </div>
+            `;
+            resultArea.innerHTML = resultHTML;
+        }
+
+        async function getSummaryWithGeminiAPI(text) {
+            const prompt = `
+                You are an expert summarization AI. Read the following news content and provide:
+                1. A concise summary (2-4 sentences).
+                2. List 3-5 key bullet points from the article.
+
+                Format your response clearly, with "Summary:" and "Key Points:" labels. Each bullet point should start with a hyphen or asterisk.
+
+                News Content:
+                ---
+                ${text}
+                ---
+            `;
+            const rawResponse = await callGeminiAPI(prompt);
+            return parseGeminiSummaryResponse(rawResponse);
+        }
+
+        function parseGeminiSummaryResponse(rawResponse) {
+            const summaryMatch = rawResponse.match(/Summary:([\s\S]*?)Key Points:/i);
+            const keyPointsMatch = rawResponse.match(/Key Points:([\s\S]*)/i);
+
+            const summary = summaryMatch ? summaryMatch[1].trim() : "Summary not available.";
+            
+            let keyPointsList = [];
+            if (keyPointsMatch) {
+                keyPointsList = keyPointsMatch[1].trim().split(/[\n*-]+/).map(pt => pt.trim()).filter(pt => pt.length > 0);
+            }
+             if (keyPointsList.length === 0 && !summaryMatch) { // If both parsing fail, return raw
+                return { summary: "Could not parse summary.", keyPoints: [rawResponse.substring(0,200) + "..."] };
+            }
+
+
+            return {
+                summary: summary,
+                keyPoints: keyPointsList.length > 0 ? keyPointsList : ["Key points not available or could not be parsed."]
+            };
+        }
+
+        function displayGeminiSummaryResult(summaryData, originalText) {
+            // First, attempt to show the analysis of the original text if not already shown
+            // This is a simple check; a more robust state management would be better.
+            if (!resultArea.innerHTML.includes("AI Explanation:")) {
+                 analyzeWithGeminiAPI(originalText).then(analysis => {
+                    displayGeminiAnalysisResult(analysis); // Display analysis first
+                    appendSummaryToResults(summaryData); // Then append summary
+                 }).catch(err => { // If analysis fails, just show summary
+                    console.error("Error re-analyzing for summary display:", err);
+                    appendSummaryToResults(summaryData);
+                 });
+            } else {
+                 appendSummaryToResults(summaryData);
+            }
+        }
+
+        function appendSummaryToResults(summaryData) {
+            // Check if an analysis result is already there to append to, otherwise create new content
+            let existingContent = resultArea.querySelector('.text-center.w-full');
+            if (!existingContent) {
+                resultArea.innerHTML = '<div class="text-center w-full"></div>'; // Create a container if not present
+                existingContent = resultArea.querySelector('.text-center.w-full');
+            }
+
+
+            const summaryHTML = `
+                <div class="gemini-result-section text-left mx-auto max-w-md mt-4">
+                    <h4>✨ AI Summary</h4>
+                    <p class="text-gray-600 mb-2">${summaryData.summary}</p>
+                    <h4>✨ Key Points</h4>
+                    <ul class="list-disc list-inside text-gray-600">
+                        ${summaryData.keyPoints.map(pt => `<li>${pt}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+            // Append summary to existing content or set as new content
+            existingContent.insertAdjacentHTML('beforeend', summaryHTML);
+        }
+
+    </script>
+</body>
+</html>
 <!-- The full HTML code goes here -->
